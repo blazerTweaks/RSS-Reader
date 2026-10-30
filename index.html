@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RSS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script>
+    // aplica tema/cor antes da primeira pintura (evita piscar com o padrão)
+    try {
+      var s = JSON.parse(localStorage.getItem('rss.settings') || '{}') || {};
+      var lightOS = window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches;
+      var theme = s.theme === 'light' || (s.theme === 'system' && lightOS) ? 'light' : 'dark';
+      var root = document.documentElement;
+      root.dataset.theme = theme;
+      if (/^#[0-9a-f]{6}$/i.test(s.accent || '')) root.style.setProperty('--accent', s.accent);
+      if (s.density === 'compact') root.dataset.density = 'compact';
+      if (s.listFont === 'small' || s.listFont === 'large') root.dataset.listfont = s.listFont;
+      if (s.showThumbs === false) root.dataset.thumbs = 'off';
+      if (s.readerWidth === 'comfortable') root.dataset.readerwidth = 'comfortable';
+      if (s.reduceMotion === true) root.dataset.motion = 'reduced';
+      if ([14, 16, 18, 20].indexOf(s.readerFont) >= 0) root.style.setProperty('--reader-font', s.readerFont + 'px');
+      var lay = JSON.parse(localStorage.getItem('rss.layout') || '{}') || {};
+      if (lay.side > 0) root.style.setProperty('--side-w', Math.min(600, Math.max(120, lay.side)) + 'px');
+      if (lay.list > 0) root.style.setProperty('--list-w', Math.min(900, Math.max(200, lay.list)) + 'px');
+    } catch (e) { /* preferências inválidas: segue o padrão */ }
+  </script>
+</head>
+<body>
+  <div id="backdrop" class="backdrop"></div>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="side-head">
+      <button class="icon-btn" id="btn-toggle" type="button" aria-label="Recolher barra lateral"><i data-icon="panel-left"></i></button>
+      <h1 class="brand">RSS</h1>
+    </div>
+
+    <nav class="side-nav">
+      <button class="nav-item" id="nav-new" type="button"><i data-icon="plus"></i><span>Novo feed</span></button>
+      <button class="nav-item" data-view="all" type="button"><i data-icon="inbox"></i><span>Todos</span></button>
+      <button class="nav-item" data-view="unread" type="button"><i data-icon="circle"></i><span>Não lidos</span><em id="count-unread" class="count"></em></button>
+      <button class="nav-item" data-view="archived" type="button"><i data-icon="archive"></i><span>Arquivados</span></button>
+    </nav>
+
+    <div class="side-label">
+      <span>Feeds</span>
+      <button class="side-add" id="btn-new-folder" type="button" title="Nova pasta" aria-label="Nova pasta"><i data-icon="plus"></i></button>
+    </div>
+    <ul id="feeds" class="feeds"></ul>
+
+    <div class="side-foot">
+      <button class="nav-item" id="btn-settings" data-view="settings" type="button"><i data-icon="settings"></i><span>Configurações</span></button>
+      <input id="file-import" type="file" accept=".opml,.xml" hidden>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="splitter splitter-side" id="split-side" role="separator" aria-orientation="vertical" aria-label="Redimensionar barra lateral" tabindex="0"></div>
+    <header class="top">
+      <button class="icon-btn open-btn" id="btn-open" type="button" aria-label="Abrir barra lateral"><i data-icon="panel-left"></i></button>
+      <div class="top-info">
+        <a class="top-feed" id="top-feed"><span id="view-title" class="view-title">Todos os posts</span></a>
+        <span class="top-meta" id="top-posts">0 posts</span>
+        <span class="top-meta" id="top-feeds">0 feeds</span>
+        <span class="top-meta" id="top-updated">Sem sincronização</span>
+        <span class="top-meta" id="top-cache">Cache: 0 KB</span>
+        <span class="top-buttons" id="top-buttons" hidden>
+          <a class="top-btn" id="top-raw" target="_blank" rel="noopener noreferrer" title="Abrir RSS original" aria-label="Abrir RSS original"><i data-icon="rss"></i><span>RSS Raw</span></a>
+          <button class="top-btn" id="top-download" type="button" title="Baixar feed" aria-label="Baixar feed"><i data-icon="download"></i><span>Baixar</span></button>
+        </span>
+        <span class="top-meta" id="top-unread">0 não lidos</span>
+        <span class="top-badge" id="top-badge">Aguardando</span>
+      </div>
+      <div class="top-actions">
+        <label class="search">
+          <i data-icon="search"></i>
+          <input id="search" type="search" placeholder="Buscar" autocomplete="off">
+        </label>
+        <button class="icon-btn" id="btn-readall" type="button" title="Marcar tudo como lido" aria-label="Marcar tudo como lido"><i data-icon="check"></i></button>
+        <button class="icon-btn" id="btn-refresh" type="button" title="Atualizar" aria-label="Atualizar"><i data-icon="refresh-cw"></i></button>
+      </div>
+    </header>
+
+    <div class="content" id="content">
+      <div class="scroll">
+        <div class="column">
+          <section id="items" class="items"></section>
+        </div>
+      </div>
+
+      <section class="reader" id="reader" hidden aria-label="Leitura">
+        <div class="splitter splitter-reader" id="split-reader" role="separator" aria-orientation="vertical" aria-label="Redimensionar lista e leitor" tabindex="0"></div>
+        <div class="reader-bar">
+          <button class="icon-btn" id="rd-close" type="button" title="Fechar (Esc)" aria-label="Fechar leitura"><i data-icon="x"></i></button>
+          <span class="grow"></span>
+          <button class="icon-btn" id="rd-prev" type="button" title="Anterior (k)" aria-label="Post anterior"><i data-icon="chevron-up"></i></button>
+          <button class="icon-btn" id="rd-next" type="button" title="Próximo (j)" aria-label="Próximo post"><i data-icon="chevron-down"></i></button>
+          <button class="icon-btn" id="rd-archive" type="button" title="Arquivar" aria-label="Arquivar post"><i data-icon="archive"></i></button>
+          <a class="icon-btn" id="rd-open" target="_blank" rel="noopener noreferrer" title="Abrir original" aria-label="Abrir original"><i data-icon="external-link"></i></a>
+        </div>
+        <div class="reader-scroll" id="rd-scroll">
+          <article class="reader-article" id="rd-article"></article>
+        </div>
+      </section>
+    </div>
+
+  </main>
+
+  <dialog id="add-dialog" class="dialog">
+    <form id="add-form" class="dialog-form">
+      <h3>Novo feed</h3>
+      <p class="hint">Cole a URL de um feed (RSS, Atom, RDF ou JSON Feed) ou de um site, e eu descubro o feed automaticamente. Também funciona com canais do YouTube e subreddits.</p>
+      <input id="add-url" type="text" placeholder="https://exemplo.com/feed.xml" autocomplete="off" required>
+      <label class="field">
+        <span>Pasta</span>
+        <select id="add-folder"></select>
+      </label>
+      <p id="add-msg" class="msg" role="status"></p>
+      <div class="dialog-actions">
+        <button class="btn" id="btn-cancel" type="button">Cancelar</button>
+        <button class="btn primary" id="btn-add" type="submit">Adicionar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="folder-dialog" class="dialog">
+    <form id="folder-form" class="dialog-form">
+      <h3 id="folder-title">Nova pasta</h3>
+      <p class="hint">Dê um nome e escolha onde a pasta fica. Você pode criar subpastas e mover feeds depois.</p>
+      <input id="folder-name" type="text" placeholder="Nome da pasta" autocomplete="off" required>
+      <label class="field" id="folder-parent-field">
+        <span>Dentro de</span>
+        <select id="folder-parent"></select>
+      </label>
+      <p id="folder-msg" class="msg" role="status"></p>
+      <div class="dialog-actions">
+        <button class="btn" id="folder-cancel" type="button">Cancelar</button>
+        <button class="btn primary" id="folder-save" type="submit">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="move-dialog" class="dialog">
+    <form id="move-form" class="dialog-form">
+      <h3>Mover feed</h3>
+      <p class="hint" id="move-feed"></p>
+      <label class="field">
+        <span>Pasta</span>
+        <select id="move-folder"></select>
+      </label>
+      <div class="dialog-actions">
+        <button class="btn" id="move-cancel" type="button">Cancelar</button>
+        <button class="btn primary" id="move-save" type="submit">Mover</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="delete-folder-dialog" class="dialog">
+    <div class="dialog-form">
+      <h3>Excluir pasta</h3>
+      <p class="hint" id="delete-folder-text"></p>
+      <div class="dialog-actions">
+        <button class="btn" id="del-cancel" type="button">Cancelar</button>
+        <button class="btn" id="del-keep" type="button">Mover filhos para a raiz</button>
+        <button class="btn primary" id="del-all" type="button">Apagar tudo</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="rename-dialog" class="dialog">
+    <form id="rename-form" class="dialog-form">
+      <h3>Renomear feed</h3>
+      <p class="hint" id="rename-hint"></p>
+      <input id="rename-name" type="text" placeholder="Nome do feed" autocomplete="off" required>
+      <p id="rename-msg" class="msg" role="status"></p>
+      <div class="dialog-actions">
+        <button class="btn" id="rename-cancel" type="button">Cancelar</button>
+        <button class="btn primary" id="rename-save" type="submit">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="ctx-menu" class="ctx-menu" role="menu" hidden></div>
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+  <script src="feed.js"></script>
+  <script src="reader.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
