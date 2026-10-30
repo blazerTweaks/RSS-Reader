@@ -4,23 +4,6 @@ Leitor de RSS/Atom/JSON Feed em HTML, CSS e JavaScript puros — sem build e sem
 backend. Funciona como site estático (GitHub Pages) e usa proxies CORS públicos
 apenas como transporte, com cache local para não depender deles a cada abertura.
 
-## Rodar localmente
-
-Basta abrir `index.html` no navegador, ou servir a pasta:
-
-```bash
-python -m http.server 8080
-# depois abra http://localhost:8080
-```
-
-## Publicar no GitHub Pages
-
-1. Crie o repositório e envie os arquivos (`index.html`, `style.css`, `feed.js`, `reader.js`, `app.js`).
-2. Em **Settings → Pages**, escolha a branch `main` e a pasta `/ (root)`.
-3. O app fica em `https://SEU-USUARIO.github.io/REPOSITORIO/`.
-
-Todos os caminhos são relativos, então funciona em subpastas sem ajustes.
-
 ## Como os feeds são buscados (CORS)
 
 Navegadores bloqueiam a leitura de feeds de outros domínios, e não existe forma
